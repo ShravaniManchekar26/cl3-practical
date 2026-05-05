@@ -1,18 +1,19 @@
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 # -------------------------------
-# STEP 1: Load Dataset
+# STEP 1: Simulated Spray Drying Dataset
 # -------------------------------
-data = load_breast_cancer()
-X = data.data
-y = data.target
+# Inputs: Temperature, Airflow, Feed Rate
+# Output: Powder Yield (continuous)
 
-print("Dataset shape:", X.shape)
+np.random.seed(42)
+X = np.random.uniform(50, 200, (200, 3))  # 3 features
+y = (0.3 * X[:, 0] + 0.5 * X[:, 1] - 0.2 * X[:, 2] +
+     np.random.normal(0, 5, 200))  # regression output
 
 # -------------------------------
 # STEP 2: Train-Test Split
@@ -22,104 +23,101 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 # -------------------------------
-# STEP 3: Proper Scaling (IMPORTANT FIX)
+# STEP 3: Scaling
 # -------------------------------
 scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
 # -------------------------------
-# STEP 4: Activation Function
-# -------------------------------
-def sigmoid(z):
-    return 1 / (1 + np.exp(-z))
-
-# -------------------------------
-# STEP 5: Neural Network (Single Layer)
+# STEP 4: Neural Network
 # -------------------------------
 def neural_network(X, weights):
-    w = weights[:-1]   # weights
-    b = weights[-1]    # bias
-    return sigmoid(np.dot(X, w) + b)
+    w = weights[:-1]
+    b = weights[-1]
+    return np.dot(X, w) + b   # Linear (Regression)
 
 # -------------------------------
-# STEP 6: Fitness Function (Log Loss)
+# STEP 5: Fitness Function (MSE)
 # -------------------------------
 def fitness(weights):
     preds = neural_network(X_train, weights)
-    
-    # Avoid log(0)
-    preds = np.clip(preds, 1e-6, 1 - 1e-6)
-    
-    loss = -np.mean(
-        y_train * np.log(preds) + (1 - y_train) * np.log(1 - preds)
-    )
-    return loss
+    return np.mean((y_train - preds) ** 2)
 
 # -------------------------------
-# STEP 7: GA PARAMETERS
+# STEP 6: GA PARAMETER RANGES (Optimized)
 # -------------------------------
-POP_SIZE = 20
-GENERATIONS = 30
-MUTATION_RATE = 0.3   # slightly reduced for stability
-DIM = X_train.shape[1] + 1  # weights + bias
+POP_RANGE = (10, 50)
+MUT_RANGE = (0.1, 0.5)
+GEN_RANGE = (20, 60)
+
+# Randomly choose GA parameters (Optimization concept)
+POP_SIZE = random.randint(*POP_RANGE)
+MUTATION_RATE = random.uniform(*MUT_RANGE)
+GENERATIONS = random.randint(*GEN_RANGE)
+
+DIM = X_train.shape[1] + 1
+
+print("Optimized GA Parameters:")
+print("Population:", POP_SIZE)
+print("Mutation Rate:", MUTATION_RATE)
+print("Generations:", GENERATIONS)
 
 # -------------------------------
-# STEP 8: Initialize Population
+# STEP 7: Initialize Population
 # -------------------------------
 def init_population():
     return [np.random.randn(DIM) for _ in range(POP_SIZE)]
 
 # -------------------------------
-# STEP 9: Selection (Best Half)
+# STEP 8: Selection
 # -------------------------------
 def selection(pop, scores):
-    indices = np.argsort(scores)
-    return [pop[i] for i in indices[:POP_SIZE//2]]
+    idx = np.argsort(scores)
+    return [pop[i] for i in idx[:POP_SIZE // 2]]
 
 # -------------------------------
-# STEP 10: Crossover
+# STEP 9: Crossover
 # -------------------------------
 def crossover(p1, p2):
     point = random.randint(1, len(p1)-1)
     return np.concatenate((p1[:point], p2[point:]))
 
 # -------------------------------
-# STEP 11: Mutation
+# STEP 10: Mutation
 # -------------------------------
 def mutate(child):
     for i in range(len(child)):
         if random.random() < MUTATION_RATE:
-            child[i] += np.random.normal(0, 0.3)
+            child[i] += np.random.normal(0, 0.5)
     return child
 
 # -------------------------------
-# STEP 12: GA TRAINING LOOP
+# STEP 11: GA Training
 # -------------------------------
 population = init_population()
 errors = []
 
 for gen in range(GENERATIONS):
     scores = [fitness(ind) for ind in population]
-    
     best_error = min(scores)
     errors.append(best_error)
-    
-    print(f"Generation {gen+1}, Best Error: {best_error:.4f}")
-    
+
+    print(f"Generation {gen+1}, Best MSE: {best_error:.4f}")
+
     parents = selection(population, scores)
     new_population = parents.copy()
-    
+
     while len(new_population) < POP_SIZE:
         p1, p2 = random.sample(parents, 2)
         child = crossover(p1, p2)
         child = mutate(child)
         new_population.append(child)
-    
+
     population = new_population
 
 # -------------------------------
-# STEP 13: Best Solution
+# STEP 12: Best Solution
 # -------------------------------
 final_scores = [fitness(ind) for ind in population]
 best_idx = np.argmin(final_scores)
@@ -128,23 +126,20 @@ best_weights = population[best_idx]
 print("\nOptimized Weights Found")
 
 # -------------------------------
-# STEP 14: Prediction
+# STEP 13: Prediction
 # -------------------------------
-def predict(X, weights):
-    probs = neural_network(X, weights)
-    return (probs > 0.5).astype(int)
+y_pred = neural_network(X_test, best_weights)
 
-y_pred = predict(X_test, best_weights)
-
-accuracy = np.mean(y_pred == y_test)
-print("Test Accuracy:", accuracy)
+# Evaluation (MSE)
+test_mse = np.mean((y_test - y_pred) ** 2)
+print("Test MSE:", test_mse)
 
 # -------------------------------
-# STEP 15: Plot Error Graph
+# STEP 14: Plot Error Graph
 # -------------------------------
 plt.plot(errors, marker='o')
-plt.title("Error vs Generations")
+plt.title("MSE vs Generations")
 plt.xlabel("Generation")
-plt.ylabel("Error (Loss)")
+plt.ylabel("Error (MSE)")
 plt.grid()
 plt.show()
